@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Onion — SSH Brute Force Alert Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; font-family: 'Courier New', Courier, monospace; padding: 0; }
+  .topbar { background: #161b22; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #30363d; }
+  .dots { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .nav-title { font-size: 12px; color: #8b949e; margin-left: 12px; }
+  .range { font-size: 11px; color: #58a6ff; }
+  .live-badge { font-size: 11px; background: #21262d; color: #f0883e; border: 1px solid #f0883e; padding: 2px 10px; border-radius: 4px; }
+  .content { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+  .alert-banner { background: #1f2937; border: 1px solid #e24b4a; border-radius: 8px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px; }
+  .sev-badge { padding: 3px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .sev-high { background: #e24b4a; color: #fff; }
+  .alert-title { font-size: 13px; color: #f9fafb; font-weight: 500; }
+  .alert-sub { font-size: 11px; color: #9ca3af; margin-top: 3px; }
+  .alert-time { font-size: 11px; color: #9ca3af; white-space: nowrap; }
+  .status-open { font-size: 11px; background: #21262d; color: #e24b4a; border: 1px solid #e24b4a; padding: 3px 10px; border-radius: 4px; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .metric-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 16px; }
+  .metric-label { font-size: 10px; color: #8b949e; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .metric-val { font-size: 28px; font-weight: 500; color: #f9fafb; }
+  .metric-sub { font-size: 10px; margin-top: 3px; }
+  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel-title { font-size: 10px; color: #8b949e; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .chart-wrap { display: flex; gap: 6px; margin-bottom: 4px; }
+  .y-axis { display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 0; width: 30px; text-align: right; }
+  .y-label { font-size: 9px; color: #8b949e; }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 100px; flex: 1; }
+  .bar { flex: 1; border-radius: 2px 2px 0 0; }
+  .x-labels { display: flex; gap: 4px; padding-left: 36px; margin-top: 4px; }
+  .x-label { flex: 1; font-size: 9px; color: #8b949e; text-align: center; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 10px; color: #8b949e; text-align: left; padding: 5px 8px; font-weight: 400; border-bottom: 1px solid #21262d; }
+  td { font-size: 11px; padding: 6px 8px; border-bottom: 1px solid #21262d; }
+  .ip { color: #58a6ff; }
+  .sev-sm-high { font-size: 10px; background: #1f2937; color: #e24b4a; border: 1px solid #e24b4a; padding: 1px 6px; border-radius: 3px; }
+  .sev-sm-med { font-size: 10px; background: #1f2937; color: #f0883e; border: 1px solid #f0883e; padding: 1px 6px; border-radius: 3px; }
+  .sev-sm-low { font-size: 10px; background: #1f2937; color: #9ca3af; border: 1px solid #30363d; padding: 1px 6px; border-radius: 3px; }
+  .mitre-item { background: #21262d; padding: 8px 12px; border-radius: 0 4px 4px 0; margin-bottom: 6px; }
+  .mitre-id { font-size: 11px; color: #f0883e; }
+  .mitre-tactic { font-size: 10px; color: #9ca3af; margin-top: 2px; }
+  .footer-bar { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
+  .footer-text { font-size: 10px; color: #9ca3af; }
+  .collecting { font-size: 10px; color: #27c93f; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;">
+    <div class="dots">
+      <div class="dot" style="background:#ff5f56"></div>
+      <div class="dot" style="background:#ffbd2e"></div>
+      <div class="dot" style="background:#27c93f"></div>
+    </div>
+    <span class="nav-title">Security Onion 2.x &mdash; Hunt &gt; Alert View &gt; auth_brute_force_ssh</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <span class="range">Time range: Jun 1 2026 &nbsp;14:23:00 – 14:40:00 UTC+1</span>
+    <span class="live-badge">&#9679; LIVE</span>
+  </div>
+</div>
+
+<div class="content">
+
+  <div class="alert-banner">
+    <div class="sev-badge sev-high">HIGH</div>
+    <div style="flex:1;">
+      <div class="alert-title">SSH Brute Force Detected &mdash; Rule: auth_brute_force_ssh &nbsp;|&nbsp; Wazuh Rule ID: 5712</div>
+      <div class="alert-sub">SRC: 192.168.1.105:52341 &rarr; DST: 192.168.1.110:22 &nbsp;&bull;&nbsp; User: root &nbsp;&bull;&nbsp; Proto: TCP/SSH &nbsp;&bull;&nbsp; 10+ failures in &lt;60s window</div>
+    </div>
+    <span class="alert-time">Jun 01 14:23:45 UTC+1</span>
+    <div class="status-open">OPEN</div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="metric-label">TOTAL FAILED EVENTS</div>
+      <div class="metric-val">847</div>
+      <div class="metric-sub" style="color:#e24b4a;">failed authentications</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">UNIQUE SOURCE IPs</div>
+      <div class="metric-val">1</div>
+      <div class="metric-sub" style="color:#f0883e;">192.168.1.105</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">ATTACK DURATION</div>
+      <div class="metric-val">12m 24s</div>
+      <div class="metric-sub" style="color:#9ca3af;">14:23:17 – 14:35:41</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">SUCCESSFUL LOGINS</div>
+      <div class="metric-val" style="color:#27c93f;">0</div>
+      <div class="metric-sub" style="color:#27c93f;">attack unsuccessful</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">FAILED SSH AUTH ATTEMPTS &mdash; COUNT PER MINUTE (Jun 01 14:23 – 14:35)</div>
+    <div class="chart-wrap">
+      <div class="y-axis">
+        <span class="y-label">90</span>
+        <span class="y-label">60</span>
+        <span class="y-label">30</span>
+        <span class="y-label">0</span>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="x-labels" id="xlabels"></div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel" style="margin-bottom:0;">
+      <div class="panel-title">TOP SOURCE IPs &mdash; ATTACK ORIGIN</div>
+      <table>
+        <thead>
+          <tr><th>IP Address</th><th>Hostname</th><th style="text-align:right;">Events</th><th style="text-align:right;">Share</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="ip">192.168.1.105</td>
+            <td style="color:#9ca3af;">attacker-vm</td>
+            <td style="text-align:right;color:#f9fafb;">847</td>
+            <td style="text-align:right;color:#e24b4a;">100%</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="height:1px;background:#21262d;margin:12px 0;"></div>
+      <div class="panel-title">TARGET ASSETS</div>
+      <table>
+        <thead>
+          <tr><th>IP Address</th><th>Service</th><th>Port</th><th>User Targeted</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="color:#58a6ff;">192.168.1.110</td>
+            <td style="color:#9ca3af;">sshd</td>
+            <td style="color:#f9fafb;">22/TCP</td>
+            <td style="color:#e24b4a;">root</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel" style="margin-bottom:0;">
+      <div class="panel-title">MITRE ATT&CK MAPPING</div>
+      <div class="mitre-item" style="border-left:3px solid #e24b4a;">
+        <div class="mitre-id">T1110 &mdash; Brute Force</div>
+        <div class="mitre-tactic">Tactic: Credential Access &nbsp;&bull;&nbsp; Confidence: HIGH</div>
+      </div>
+      <div class="mitre-item" style="border-left:3px solid #f0883e;">
+        <div class="mitre-id">T1110.001 &mdash; Password Guessing</div>
+        <div class="mitre-tactic">Tactic: Credential Access &nbsp;&bull;&nbsp; Confidence: HIGH</div>
+      </div>
+      <div class="mitre-item" style="border-left:3px solid #30363d;">
+        <div class="mitre-id">T1021.004 &mdash; Remote Services: SSH</div>
+        <div class="mitre-tactic">Tactic: Lateral Movement &nbsp;&bull;&nbsp; Confidence: MEDIUM</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">RECENT LOG EVENTS &mdash; /var/log/auth.log &nbsp;|&nbsp; Wazuh decoder: sshd &nbsp;|&nbsp; Showing last 6 of 847</div>
+    <table style="table-layout:fixed;">
+      <colgroup>
+        <col style="width:175px;">
+        <col style="width:80px;">
+        <col style="width:140px;">
+        <col style="width:120px;">
+        <col>
+      </colgroup>
+      <thead>
+        <tr><th>Timestamp</th><th>Severity</th><th>Source IP</th><th>PID</th><th>Message</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color:#9ca3af;white-space:nowrap;">Jun 01 14:35:41</td>
+          <td><span class="sev-sm-high">HIGH</span></td>
+          <td class="ip">192.168.1.105</td>
+          <td style="color:#9ca3af;">sshd[3847]</td>
+          <td style="color:#f9fafb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Failed password for root from 192.168.1.105 port 52889 ssh2</td>
+        </tr>
+        <tr>
+          <td style="color:#9ca3af;white-space:nowrap;">Jun 01 14:35:39</td>
+          <td><span class="sev-sm-high">HIGH</span></td>
+          <td class="ip">192.168.1.105</td>
+          <td style="color:#9ca3af;">sshd[3846]</td>
+          <td style="color:#f9fafb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Failed password for root from 192.168.1.105 port 52888 ssh2</td>
+        </tr>
+        <tr>
+          <td style="color:#9ca3af;white-space:nowrap;">Jun 01 14:33:05</td>
+          <td><span class="sev-sm-med">MED</span></td>
+          <td class="ip">192.168.1.105</td>
+          <td style="color:#9ca3af;">sshd[3400]</td>
+          <td style="color:#f9fafb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Failed password for root from 192.168.1.105 port 52610 ssh2</td>
+        </tr>
+        <tr>
+          <td style="color:#9ca3af;white-space:nowrap;">Jun 01 14:30:12</td>
+          <td><span class="sev-sm-med">MED</span></td>
+          <td class="ip">192.168.1.105</td>
+          <td style="color:#9ca3af;">sshd[3200]</td>
+          <td style="color:#f9fafb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Failed password for root from 192.168.1.105 port 52480 ssh2</td>
+        </tr>
+        <tr>
+          <td style="color:#9ca3af;white-space:nowrap;">Jun 01 14:23:45</td>
+          <td><span class="sev-sm-high">HIGH</span></td>
+          <td class="ip">192.168.1.105</td>
+          <td style="color:#9ca3af;">alert-engine</td>
+          <td style="color:#f0883e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[ALERT TRIGGERED] auth_brute_force_ssh: 10 failures in 28s from single source</td>
+        </tr>
+        <tr>
+          <td style="color:#9ca3af;white-space:nowrap;">Jun 01 14:23:17</td>
+          <td><span class="sev-sm-low">LOW</span></td>
+          <td class="ip">192.168.1.105</td>
+          <td style="color:#9ca3af;">sshd[2341]</td>
+          <td style="color:#f9fafb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Failed password for root from 192.168.1.105 port 52341 ssh2 — [first event]</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer-bar">
+    <span class="footer-text">Sensor: target-ubuntu-vm &nbsp;&bull;&nbsp; Wazuh agent v4.x &nbsp;&bull;&nbsp; Elasticsearch index: wazuh-alerts-* &nbsp;&bull;&nbsp; Dashboard: Kibana 8.x</span>
+    <span class="collecting">&#9679;&nbsp; Collecting — Last event: 14:35:41</span>
+  </div>
+
+</div>
+
+<script>
+const data = [12,45,78,82,85,81,76,79,72,68,70,52,47];
+const labels = ['14:23','14:24','14:25','14:26','14:27','14:28','14:29','14:30','14:31','14:32','14:33','14:34','14:35'];
+const maxVal = Math.max(...data);
+const barsDiv = document.getElementById('bars');
+const xlabels = document.getElementById('xlabels');
+
+data.forEach((v, i) => {
+  const pct = (v / maxVal) * 100;
+  const color = v >= 80 ? '#e24b4a' : '#f0883e';
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  bar.style.height = pct + '%';
+  bar.style.background = color;
+  bar.title = labels[i] + ': ' + v + ' events';
+  barsDiv.appendChild(bar);
+
+  const lbl = document.createElement('div');
+  lbl.className = 'x-label';
+  lbl.textContent = labels[i].replace('14:','') + 'm';
+  xlabels.appendChild(lbl);
+});
+</script>
+</body>
+</html>
